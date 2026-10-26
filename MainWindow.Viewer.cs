@@ -91,12 +91,19 @@ public partial class MainWindow
         _vswitching = false;
         ViewerTargetBox.SelectedItem = SplitsList.SelectedItem ?? (_splits.Count > 0 ? _splits[^1] : null);
 
+        // Where the tiles/card are on screen must be captured before the viewer covers them.
+        var plan = AnimationsEnabled && !_animating && ViewerOverlay.Visibility != Visibility.Visible ? PlanOpen(target) : null;
+
+        if (plan != null) { ViewerOverlay.Opacity = 0; ViewerOverlay.IsHitTestVisible = false; }
         ViewerOverlay.Visibility = Visibility.Visible;
         ViewerOverlay.Focus();
         ViewerOverlay.UpdateLayout();   // so the list has a real height to fit the page into
         _vaspect = PageAspectOfSource(target);
         _vzoom = FitZoom();
         LoadView(target, pageIndex);
+
+        if (plan != null && _vpages.Count > 0) _ = PlayOpenAsync(plan, target, Math.Clamp(pageIndex, 0, _vpages.Count - 1));
+        else { ViewerOverlay.Opacity = 1; ViewerOverlay.IsHitTestVisible = true; }
     }
 
     List<ViewerSource> BuildViewerSources()
@@ -148,6 +155,14 @@ public partial class MainWindow
 
     void CloseViewer()
     {
+        if (ViewerOverlay.Visibility != Visibility.Visible || _animating) return;
+        var plan = AnimationsEnabled ? PlanClose() : null;
+        if (plan != null) _ = PlayCloseAsync(plan);
+        else CloseViewerNow();
+    }
+
+    void CloseViewerNow()
+    {
         if (ViewerOverlay.Visibility != Visibility.Visible) return;
 
         // Bring the page grid to where the reader stopped, without changing the user's selection.
@@ -190,6 +205,13 @@ public partial class MainWindow
         _vcurrent = -1;
 
         ApplyGeometry();
+
+        // Start the sharp render of the page we are about to show right away, so it is already cached when its slot appears
+        // (during the open animation the render runs while the pages are still flying in).
+        if (_vpages.Count > 0)
+            Renderer.Request(_vpages[Math.Clamp(pageIndex, 0, _vpages.Count - 1)].Ref, ViewerTargetWidth(),
+                () => (int)RenderPriority.ViewerCurrent, 0, _ => { });
+
         ViewerList.ItemsSource = _vpages;
         ViewerEmpty.Visibility = _vpages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ViewerPageCount.Text = $"/ {_vpages.Count:N0}";
@@ -297,7 +319,9 @@ public partial class MainWindow
         CancelViewerRequests(vp);
 
         bool near = Math.Abs(vp.Position - 1 - _vcurrent) <= 1;
-        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), near ? 50 : 220, img => vp.Image = img);
+        vp.IsSharp = false;
+        int settle = vp.Position - 1 == _vcurrent ? 0 : near ? 50 : 220;   // the page you are on does not wait
+        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), settle, img => { vp.Image = img; vp.IsSharp = true; });
 
         if (vp.Image != null) return;   // the sharp image came straight from the cache, or an older image is still showing
         vp.Image = vp.Ref.Thumb;
@@ -378,6 +402,7 @@ public partial class MainWindow
     void Viewer_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (ViewerOverlay.Visibility != Visibility.Visible) return;
+        if (_animating) { e.Handled = true; return; }   // ignore keys for the half second a transition takes
         if (e.Key == Key.Escape) { CloseViewer(); e.Handled = true; return; }
         if (Keyboard.FocusedElement is TextBox or ComboBox or ComboBoxItem) return;   // typing a page number etc.
 

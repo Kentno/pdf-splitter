@@ -64,6 +64,14 @@ public static class Renderer
     static readonly Timer? _logTimer;   // kept in a field so it is not garbage-collected
 
     static int PendingCount { get { lock (Gate) return Pending.Count; } }
+
+    /// <summary>Writes a timestamped line to the PDFSPLITTER_PERFLOG file (if set); used to time the viewer transition.</summary>
+    public static void Trace(string text)
+    {
+        var log = Environment.GetEnvironmentVariable("PDFSPLITTER_PERFLOG");
+        if (string.IsNullOrEmpty(log)) return;
+        try { File.AppendAllText(log, $"{DateTime.Now:HH:mm:ss.fff} TRACE {text}{Environment.NewLine}"); } catch { }
+    }
     static ImageLru CacheFor(uint width) => width <= 400 ? ThumbCache : PageCache;
 
     public static ImageSource? TryGetCached(PageRef page, uint width) => CacheFor(width).TryGet(page.Doc, page.Index, width);
