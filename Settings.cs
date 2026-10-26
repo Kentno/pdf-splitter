@@ -24,6 +24,8 @@ public class AppSettings
     public double MonthlyBudgetUsd { get; set; }
     public bool BackgroundOcr { get; set; } = true;
     public UsageTotals Usage { get; set; } = new();
+    public string? LastProjectPath { get; set; }
+    public List<string> RecentProjects { get; set; } = new();
 }
 
 public record ModelOption(string Id, string Label)
@@ -127,6 +129,9 @@ public static class UsageTracker
     public static long SessionInput, SessionOutput, SessionRequests;
     public static double SessionCost;
 
+    /// <summary>Lifetime usage of the open project; swapped when a project is opened.</summary>
+    public static UsageTotals ProjectUsage { get; set; } = new();
+
     public static void Record(string model, long input, long output, long cacheRead, long cacheWrite)
     {
         long totalIn = input + cacheRead + cacheWrite;
@@ -139,6 +144,9 @@ public static class UsageTracker
         if (u.MonthKey != month) { u.MonthKey = month; u.MonthInput = 0; u.MonthOutput = 0; u.MonthCost = 0; }
         u.AllInput += totalIn; u.AllOutput += output; u.AllCost += cost; u.AllRequests++;
         u.MonthInput += totalIn; u.MonthOutput += output; u.MonthCost += cost;
+
+        var pu = ProjectUsage;
+        pu.AllInput += totalIn; pu.AllOutput += output; pu.AllCost += cost; pu.AllRequests++;
         SettingsStore.Save();
     }
 
@@ -158,6 +166,7 @@ public static class UsageTracker
         double mCost = u.MonthKey == month ? u.MonthCost : 0;
         long mIn = u.MonthKey == month ? u.MonthInput : 0, mOut = u.MonthKey == month ? u.MonthOutput : 0;
         return $"This session:  {Tok(SessionInput)} in / {Tok(SessionOutput)} out  \u2248 ${SessionCost:F3}  ({SessionRequests} requests)\n" +
+               $"This project:  {Tok(ProjectUsage.AllInput)} in / {Tok(ProjectUsage.AllOutput)} out  ≈ ${ProjectUsage.AllCost:F2}  ({ProjectUsage.AllRequests} requests)\n" +
                $"This month ({month}):  {Tok(mIn)} in / {Tok(mOut)} out  \u2248 ${mCost:F2}\n" +
                $"All time:  {Tok(u.AllInput)} in / {Tok(u.AllOutput)} out  \u2248 ${u.AllCost:F2}  ({u.AllRequests} requests)";
     }

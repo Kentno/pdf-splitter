@@ -27,6 +27,8 @@ public class SourceDoc
     public PageData[] Data { get; set; } = Array.Empty<PageData>();
     public Task TextTask { get; set; } = Task.CompletedTask;
     public CancellationTokenSource Cts { get; } = new();
+    public string? Fingerprint { get; set; }
+    public int CachePending;
     public override string ToString() => $"{Name}  ({PageCount} page{(PageCount == 1 ? "" : "s")})";
 }
 

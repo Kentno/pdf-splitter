@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         PoolList.ItemsSource = _pool;
         SplitsList.ItemsSource = _splits;
         InitChat();
+        InitProject();
     }
 
     void SetStatus(string text) => StatusText.Text = text;
@@ -62,32 +63,24 @@ public partial class MainWindow : Window
 
     async Task AddFilesAsync(IEnumerable<string> paths)
     {
+        paths = paths.ToList();
+        var project = paths.FirstOrDefault(p => p.EndsWith(ProjectExt, StringComparison.OrdinalIgnoreCase));
+        if (project != null) { await OpenProjectInteractiveAsync(project); return; }
+
         var skipped = new List<string>();
         int added = 0;
         foreach (var path in paths.Where(File.Exists))
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext != ".pdf" && !ImageExts.Contains(ext))
+            {
+                skipped.Add(Path.GetFileName(path) + " (unsupported type)");
+                continue;
+            }
             try
             {
                 SetStatus($"Loading {Path.GetFileName(path)}...");
-                SourceDoc doc;
-                if (ext == ".pdf")
-                {
-                    var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
-                    var pdf = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-                    doc = new SourceDoc { Path = path, PageCount = (int)pdf.PageCount, Pdf = pdf };
-                }
-                else if (ImageExts.Contains(ext))
-                {
-                    doc = new SourceDoc { Path = path, IsImage = true, PageCount = 1 };
-                }
-                else { skipped.Add(Path.GetFileName(path) + " (unsupported type)"); continue; }
-
-                doc.Id = ++_nextDocId;
-                Indexer.Start(doc);
-                _sources.Add(doc);
-                for (int i = 0; i < doc.PageCount; i++) _pool.Add(new PageRef(doc, i));
-                SourcesList.SelectedItem = doc;
+                await LoadDocAsync(path);
                 added++;
             }
             catch (Exception ex)
@@ -100,6 +93,31 @@ public partial class MainWindow : Window
         if (skipped.Count > 0)
             MessageBox.Show(this, "Could not load:\n\n" + string.Join("\n", skipped) +
                 "\n\nPassword-protected PDFs are not supported.", "PDF Splitter", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>Loads one PDF/image as a source (throws on failure). <paramref name="forcedId"/> restores a project's doc id.</summary>
+    async Task<SourceDoc> LoadDocAsync(string path, int? forcedId = null)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        SourceDoc doc;
+        if (ext == ".pdf")
+        {
+            var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
+            var pdf = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+            doc = new SourceDoc { Path = path, PageCount = (int)pdf.PageCount, Pdf = pdf };
+        }
+        else
+        {
+            doc = new SourceDoc { Path = path, IsImage = true, PageCount = 1 };
+        }
+
+        doc.Id = forcedId ?? ++_nextDocId;
+        if (doc.Id > _nextDocId) _nextDocId = doc.Id;
+        Indexer.Start(doc);
+        _sources.Add(doc);
+        for (int i = 0; i < doc.PageCount; i++) _pool.Add(new PageRef(doc, i));
+        SourcesList.SelectedItem = doc;
+        return doc;
     }
 
     void RemoveSource_Click(object sender, RoutedEventArgs e)

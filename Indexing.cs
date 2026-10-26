@@ -24,7 +24,13 @@ public static class Indexer
     public static void Start(SourceDoc doc)
     {
         doc.Data = Enumerable.Range(0, doc.PageCount).Select(_ => new PageData()).ToArray();
-        doc.TextTask = Task.Run(() => BuildText(doc));
+        doc.TextTask = Task.Run(() =>
+        {
+            doc.Fingerprint = DocCache.Fingerprint(doc.Path);
+            if (DocCache.TryLoad(doc)) return;   // text + OCR results from an earlier session
+            BuildText(doc);
+            DocCache.Save(doc);
+        });
         _ = doc.TextTask.ContinueWith(_ => BackgroundOcrAsync(doc), TaskScheduler.Default).Unwrap();
     }
 
@@ -118,10 +124,12 @@ public static class OcrService
     {
         var d = doc.Data[index];
         if (d.OcrDone || Engine == null) return;
+        bool ran = false;
         await Gate.WaitAsync();
         try
         {
             if (d.OcrDone) return;
+            ran = true;
             using var bmp = await LoadAsync(doc, index);
             var res = await Engine.RecognizeAsync(bmp);
             d.Text = res.Text;
@@ -144,6 +152,7 @@ public static class OcrService
         {
             d.OcrDone = true;
             Gate.Release();
+            if (ran) DocCache.ScheduleSave(doc);
         }
     }
 
