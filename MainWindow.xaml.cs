@@ -26,7 +26,11 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        // The glow colour is the system accent; an Effect cannot take a DynamicResource colour, so it is built here.
+        var accent = SystemParameters.WindowGlassColor;
+        Resources["DropGlow"] = new System.Windows.Media.Effects.DropShadowEffect { ShadowDepth = 0, BlurRadius = 18, Opacity = 0.85, Color = accent };
         InitializeComponent();
+        InsertLine.Effect = new System.Windows.Media.Effects.DropShadowEffect { ShadowDepth = 0, BlurRadius = 10, Opacity = 0.9, Color = accent };
         SourcesList.ItemsSource = _sources;
         PoolList.ItemsSource = _pool;
         SplitsList.ItemsSource = _splits;

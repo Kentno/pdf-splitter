@@ -124,7 +124,7 @@ public partial class MainWindow
         SetStatus($"Dragging {pages.Count} page(s): drop on a split, or on the empty area to make a new split.");
         IsDraggingPages = true;
         try { DragDrop.DoDragDrop(PoolList, new DataObject(PagesFormat, pages), DragDropEffects.Copy); }
-        finally { IsDraggingPages = false; }
+        finally { IsDraggingPages = false; ResetNudge(immediate: true); }
     }
 
     void Pool_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -148,7 +148,8 @@ public partial class MainWindow
         if (DraggedPages(e) == null) return;   // file drops fall through to the window handler
         e.Effects = DragDropEffects.Copy;
         e.Handled = true;
-        if (sender is ListBoxItem item) item.Tag = "drop";
+        // Top half inserts at the start of the split, bottom half adds at the end.
+        if (sender is ListBoxItem item) item.Tag = e.GetPosition(item).Y < item.ActualHeight / 2 ? "drop-top" : "drop-bottom";
     }
 
     void SplitCard_DragLeave(object sender, DragEventArgs e)
@@ -159,13 +160,15 @@ public partial class MainWindow
     void SplitCard_Drop(object sender, DragEventArgs e)
     {
         if (sender is not ListBoxItem { DataContext: SplitItem split } item) return;
+        bool atStart = e.GetPosition(item).Y < item.ActualHeight / 2;
         item.Tag = null;
         var pages = DraggedPages(e);
         if (pages == null) return;
 
-        foreach (var p in pages) split.Pages.Add(new PageRef(p.Doc, p.Index));
+        int at = atStart ? 0 : split.Pages.Count;
+        InsertPages(split, at, pages);
         SplitsList.SelectedItem = split;
-        SetStatus($"Added {pages.Count} page(s) to “{split.Name}”.");
+        SetStatus($"Added {pages.Count} page(s) to the {(atStart ? "start" : "end")} of “{split.Name}”.");
         e.Handled = true;
     }
 
