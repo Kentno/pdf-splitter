@@ -1,213 +1,430 @@
 <Window x:Class="PdfSplitter.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PDF Splitter" Width="1150" Height="760" MinWidth="900" MinHeight="560"
+        xmlns:local="clr-namespace:PdfSplitter"
+        Title="PDF Splitter" Width="1500" Height="860" MinWidth="980" MinHeight="600"
         AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver"
-        Background="#F5F6F8" FontSize="13">
+        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+        FontSize="13">
     <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="10,4"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
+        <!-- A split "card": a drop target for dragged pages -->
+        <Style x:Key="SplitCardItem" TargetType="ListBoxItem">
+            <Setter Property="AllowDrop" Value="True"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <!-- Bubbling events: the card marks the drag handled before the window's file-drop handler can veto it -->
+            <EventSetter Event="DragOver" Handler="SplitCard_DragOver"/>
+            <EventSetter Event="DragLeave" Handler="SplitCard_DragLeave"/>
+            <EventSetter Event="Drop" Handler="SplitCard_Drop"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" CornerRadius="8" BorderThickness="1"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="drop">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style x:Key="Header" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
+
+        <Style x:Key="CardNameBox" TargetType="TextBox" BasedOn="{StaticResource FlatTextBox}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsDraggingPages, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                    <Setter Property="IsHitTestVisible" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PlainListBox" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+
+        <Style x:Key="EmptyHint" TargetType="StackPanel">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
     </Window.Resources>
 
-    <DockPanel Margin="10">
-        <!-- Top bar -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-            <Button DockPanel.Dock="Left" x:Name="ProjectBtn" Content="Project &#9662;" Click="ProjectMenu_Click" FontWeight="SemiBold"/>
-            <Button DockPanel.Dock="Left" Content="Open files..." Click="OpenFiles_Click"/>
-            <Button DockPanel.Dock="Left" Content="AI assistant" Click="ToggleChat_Click" FontWeight="SemiBold"/>
-            <Button DockPanel.Dock="Left" Content="AI settings..." Click="AiSettings_Click"/>
-            <Button DockPanel.Dock="Right" Content="Export all splits" Click="ExportAll_Click" FontWeight="SemiBold" Margin="6,0,0,0"/>
-            <Button DockPanel.Dock="Right" Content="Export selected" Click="ExportSelected_Click" Margin="6,0,0,0"/>
-            <Button DockPanel.Dock="Right" Content="Browse..." Click="BrowseOutput_Click" Margin="6,0,0,0"/>
-            <TextBlock DockPanel.Dock="Left" Text="Output folder:" VerticalAlignment="Center" Margin="12,0,6,0"/>
-            <TextBox x:Name="OutputBox" VerticalContentAlignment="Center"
-                     ToolTip="Leave blank to save next to the first loaded file"/>
-        </DockPanel>
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-        <!-- Status bar -->
-        <Border DockPanel.Dock="Bottom" Margin="0,8,0,0">
-            <TextBlock x:Name="StatusText" Foreground="#555" Text="Drop PDFs or images anywhere in this window."/>
-        </Border>
+        <!-- ============ TOP BAR ============ -->
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button x:Name="ProjectBtn" Style="{StaticResource GhostButton}" Click="ProjectMenu_Click" ToolTip="Projects: new, open, save as, recent">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8B7;" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="ProjectNameText" Text="Untitled" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE70D;" FontSize="10" Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource OutlineButton}" Click="OpenFiles_Click" Margin="10,0,0,0" ToolTip="Add PDFs or images (or just drop them anywhere)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" Margin="0,0,8,0" FontSize="14"/>
+                        <TextBlock Text="Add files"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
 
-        <Grid>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="ChatToggleBtn" Style="{StaticResource OutlineButton}" Click="ToggleChat_Click" ToolTip="Show or hide the AI assistant">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8BD;" Margin="0,0,8,0" FontSize="14"/>
+                        <TextBlock Text="AI assistant"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource GhostButton}" Click="AiSettings_Click" ToolTip="API key, model, spend limit and usage" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE713;"/>
+                </Button>
+                <Button Style="{StaticResource OutlineButton}" Click="ExportSelected_Click" Content="Export selected" ToolTip="Write the selected split to a PDF"/>
+                <Button Style="{StaticResource AccentButton}" Click="ExportAll_Click" Margin="0" ToolTip="Write every split to its own PDF">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE74E;" Margin="0,0,8,0" FontSize="14"/>
+                        <TextBlock Text="Export all splits"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ============ MAIN PANES ============ -->
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="1.15*" MinWidth="360"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*" MinWidth="320"/>
                 <ColumnDefinition x:Name="ChatSplitCol" Width="0"/>
                 <ColumnDefinition x:Name="ChatCol" Width="0"/>
             </Grid.ColumnDefinitions>
 
-            <!-- LEFT: sources + pages -->
-            <Grid Grid.Column="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="90"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <!-- LIBRARY -->
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Style="{StaticResource Header}" Text="Loaded files"/>
-                <ListBox Grid.Row="1" x:Name="SourcesList" DisplayMemberPath="."/>
-                <DockPanel Grid.Row="2" Margin="0,6,0,6">
-                    <Button DockPanel.Dock="Right" Content="Remove file" Click="RemoveSource_Click" Margin="6,0,0,0"/>
-                    <TextBlock Style="{StaticResource Header}" Text="Pages (Ctrl/Shift to multi-select)" Margin="0" VerticalAlignment="Center"/>
-                </DockPanel>
-                <ListBox Grid.Row="3" x:Name="PoolList" SelectionMode="Extended"
-                         VirtualizingPanel.IsVirtualizing="True" ScrollViewer.CanContentScroll="True">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Margin="2">
-                                <Border Width="84" Height="112" Background="#E8E8E8" BorderBrush="#CCC" BorderThickness="1">
-                                    <Image Stretch="Uniform" Source="{Binding Thumb}" Loaded="Thumb_Loaded" Unloaded="Thumb_Unloaded"/>
-                                </Border>
-                                <StackPanel Margin="10,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Number, StringFormat=Page {0}}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding Doc.Name}" Foreground="Gray"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-                <StackPanel Grid.Row="4" Margin="0,8,0,0">
-                    <WrapPanel Margin="0,0,0,6">
-                        <Button Content="New split from selected pages" Click="NewSplitFromSelection_Click"/>
-                        <Button Content="Add selected pages to current split" Click="AddSelectionToSplit_Click"/>
-                    </WrapPanel>
-                    <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="Add to current" Click="AddRangeToSplit_Click" Margin="6,0,0,0"/>
-                        <Button DockPanel.Dock="Right" Content="New split(s)" Click="NewSplitFromRange_Click" Margin="6,0,0,0"/>
-                        <TextBlock DockPanel.Dock="Left" Text="Page ranges:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox x:Name="RangeBox" VerticalContentAlignment="Center"
-                                 ToolTip="Uses the file selected in 'Loaded files'.&#10;Commas combine pages into one split: 1-5, 8, 10-12&#10;Semicolons make several splits at once: 1-10; 11-20; 21-35"/>
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock x:Name="PoolInfoText" DockPanel.Dock="Right" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Title}" Text="Pages"/>
                     </DockPanel>
-                    <TextBlock Foreground="Gray" FontSize="11" Margin="0,3,0,0"
-                               Text="e.g.  1-10; 11-20; 21-35  makes three splits.  1-5, 8  makes one split from those pages."/>
-                </StackPanel>
-            </Grid>
 
-            <GridSplitter Grid.Column="1" Width="10" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <ListBox Grid.Row="1" x:Name="SourcesList" Style="{StaticResource PlainListBox}" Margin="0,0,0,10"
+                             ItemContainerStyle="{StaticResource ChipItem}" Visibility="Collapsed"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" MaxWidth="220" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Style="{StaticResource Caption}" Margin="6,0,2,0" VerticalAlignment="Center"
+                                               Text="{Binding PageCount, StringFormat={}{0} pg}"/>
+                                    <Button Style="{StaticResource GhostButton}" Padding="5" Margin="2,0,0,0" Click="RemoveChip_Click"
+                                            ToolTip="Remove this file (and its pages from any split)">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE711;" FontSize="10"/>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
-            <!-- RIGHT: splits -->
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+                    <Grid Grid.Row="2">
+                        <ListBox x:Name="PoolList" Style="{StaticResource PlainListBox}" SelectionMode="Extended"
+                                 ItemContainerStyle="{StaticResource TileItem}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.CanContentScroll="True"
+                                 SelectionChanged="PoolList_SelectionChanged"
+                                 PreviewMouseLeftButtonDown="Pool_PreviewMouseLeftButtonDown"
+                                 PreviewMouseMove="Pool_PreviewMouseMove"
+                                 PreviewMouseLeftButtonUp="Pool_PreviewMouseLeftButtonUp">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <local:VirtualizingGridPanel ItemWidth="128" ItemHeight="184"/>
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Width="116" Margin="0,4" ToolTip="{Binding Caption}">
+                                        <Border Width="104" Height="136" HorizontalAlignment="Center" CornerRadius="4" BorderThickness="1"
+                                                ClipToBounds="True"
+                                                Background="{DynamicResource ControlAltFillColorSecondaryBrush}"
+                                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                                            <Image Stretch="Uniform" Source="{Binding Thumb}" Loaded="Thumb_Loaded" Unloaded="Thumb_Unloaded"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding Number}" HorizontalAlignment="Center" Margin="0,5,0,0"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
 
-                <TextBlock Grid.Row="0" Style="{StaticResource Header}" Text="Splits (each becomes one PDF)"/>
-                <ListBox Grid.Row="1" x:Name="SplitsList" HorizontalContentAlignment="Stretch">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="2">
-                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" FontWeight="SemiBold"/>
-                                <TextBlock Foreground="#666" TextTrimming="CharacterEllipsis" Margin="2,2,0,0">
-                                    <Run Text="{Binding CountText, Mode=OneWay}"/><Run Text="  &#8212;  "/><Run Text="{Binding Summary, Mode=OneWay}"/>
+                        <StackPanel x:Name="PoolEmpty" Style="{StaticResource EmptyHint}">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE8E5;" FontSize="44" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                            <TextBlock Text="Drop PDFs or images here" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4"/>
+                            <TextBlock Style="{StaticResource Caption}" Text="or use Add files. Pages appear here as a grid." HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Row="3" Margin="0,12,0,0">
+                        <WrapPanel Margin="0,0,0,10">
+                            <Button Style="{StaticResource AccentButton}" Click="NewSplitFromSelection_Click" Content="New split from selection"
+                                    ToolTip="Ctrl/Shift-click to select pages, or drag them onto a split"/>
+                            <Button Style="{StaticResource OutlineButton}" Click="AddSelectionToSplit_Click" Content="Add to selected split"/>
+                        </WrapPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid>
+                                <TextBox x:Name="RangeBox" VerticalContentAlignment="Center" Padding="8,6"
+                                         ToolTip="Uses the file selected above.&#10;Commas combine pages into one split: 1-5, 8, 10-12&#10;Semicolons make several splits at once: 1-10; 11-20; 21-35"/>
+                                <TextBlock Text="Page ranges, e.g. 1-10; 11-20; 21-35" IsHitTestVisible="False" Margin="10,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=RangeBox}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
                                 </TextBlock>
+                            </Grid>
+                            <Button Grid.Column="1" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Click="NewSplitFromRange_Click" Content="Create splits"/>
+                            <Button Grid.Column="2" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Click="AddRangeToSplit_Click" Content="Add to split"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- SPLITS -->
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="1.2*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="MoveSplitDown_Click" ToolTip="Move split down" Margin="0">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74B;" FontSize="13"/>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="MoveSplitUp_Click" ToolTip="Move split up">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74A;" FontSize="13"/>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="NewEmptySplit_Click" ToolTip="Add an empty split">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" FontSize="13" Margin="0,0,6,0"/>
+                                <TextBlock Text="New"/>
                             </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                        </Button>
+                        <TextBlock x:Name="SplitsCountText" DockPanel.Dock="Right" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Style="{StaticResource Title}" Text="Splits"/>
+                    </DockPanel>
 
-                <WrapPanel Grid.Row="2" Margin="0,6,0,6">
-                    <Button Content="New empty split" Click="NewEmptySplit_Click"/>
-                    <Button Content="Delete split" Click="DeleteSplit_Click"/>
-                    <Button Content="Move up" Click="MoveSplitUp_Click"/>
-                    <Button Content="Move down" Click="MoveSplitDown_Click"/>
-                </WrapPanel>
+                    <Grid Grid.Row="1">
+                        <ListBox x:Name="SplitsList" Style="{StaticResource PlainListBox}" HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ItemContainerStyle="{StaticResource SplitCardItem}"
+                                 AllowDrop="True" DragOver="SplitsArea_DragOver" Drop="SplitsArea_Drop">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="12,10,8,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBox Style="{StaticResource CardNameBox}" FontWeight="SemiBold" FontSize="14"
+                                                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                     GotKeyboardFocus="SplitName_GotKeyboardFocus"/>
+                                            <TextBlock Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="5,3,0,0">
+                                                <Run Text="{Binding CountText, Mode=OneWay}"/><Run Text=" &#183; "/><Run Text="{Binding Summary, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource GhostButton}" Margin="6,0,0,0" VerticalAlignment="Top"
+                                                Click="DeleteSplitCard_Click" ToolTip="Delete this split (pages stay in the file)">
+                                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74D;" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
 
-                <DockPanel Grid.Row="3">
-                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Header}" Text="Pages in selected split (in output order)"/>
-                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                        <Button Content="Move up" Click="PageUp_Click"/>
-                        <Button Content="Move down" Click="PageDown_Click"/>
-                        <Button Content="Remove from split" Click="RemovePages_Click"/>
-                    </WrapPanel>
-                    <ListBox x:Name="SplitPagesList" SelectionMode="Extended"
-                             ItemsSource="{Binding SelectedItem.Pages, ElementName=SplitsList}"
-                             DisplayMemberPath="Caption"/>
-                </DockPanel>
-                <TextBlock Grid.Row="4" Foreground="Gray" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Pages can come from several files, and dropped images become one page each."/>
-            </Grid>
+                        <StackPanel x:Name="SplitsEmpty" Style="{StaticResource EmptyHint}">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE8A5;" FontSize="40" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                            <TextBlock Text="No splits yet" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4"/>
+                            <TextBlock Style="{StaticResource Caption}" HorizontalAlignment="Center" TextAlignment="Center"
+                                       Text="Select pages and click New split,&#10;or drag pages here, or ask the AI assistant."/>
+                        </StackPanel>
+                    </Grid>
+
+                    <DockPanel Grid.Row="2" Margin="0,10,0,8">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="RemovePages_Click" ToolTip="Remove selected pages from this split" Margin="0">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74D;" FontSize="13"/>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="PageDown_Click" ToolTip="Move selected pages down">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74B;" FontSize="13"/>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="PageUp_Click" ToolTip="Move selected pages up">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74A;" FontSize="13"/>
+                        </Button>
+                        <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding SelectedItem.Name, ElementName=SplitsList, StringFormat=Pages in {0}, FallbackValue=Pages in the selected split}"/>
+                    </DockPanel>
+
+                    <ListBox Grid.Row="3" x:Name="SplitPagesList" Style="{StaticResource PlainListBox}" SelectionMode="Extended"
+                             ItemsSource="{Binding SelectedItem.Pages, ElementName=SplitsList}" DisplayMemberPath="Caption"/>
+                </Grid>
+            </Border>
 
             <!-- AI ASSISTANT -->
-            <GridSplitter x:Name="ChatSplitter" Grid.Column="3" Width="10" HorizontalAlignment="Stretch" Background="Transparent" Visibility="Collapsed"/>
-            <Grid x:Name="ChatPanel" Grid.Column="4" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <GridSplitter x:Name="ChatSplitter" Grid.Column="3" Width="12" HorizontalAlignment="Stretch" Background="Transparent" Visibility="Collapsed"/>
+            <Border x:Name="ChatPanel" Grid.Column="4" Style="{StaticResource Card}" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <DockPanel Grid.Row="0" Margin="0,0,0,6">
-                    <Button DockPanel.Dock="Right" Content="AI settings" Click="AiSettings_Click" Margin="6,0,0,0"/>
-                    <Button DockPanel.Dock="Right" x:Name="UndoBtn" Content="Undo AI changes" Click="UndoAi_Click" IsEnabled="False" Margin="6,0,0,0"/>
-                    <Button DockPanel.Dock="Right" Content="New chat" Click="NewChat_Click" Margin="6,0,0,0"/>
-                    <TextBlock Style="{StaticResource Header}" Text="AI assistant" Margin="0" VerticalAlignment="Center"/>
-                </DockPanel>
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Right" x:Name="UndoBtn" Style="{StaticResource GhostButton}" Click="UndoAi_Click" IsEnabled="False"
+                                ToolTip="Restore the splits to how they were before your last AI request" Margin="0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Glyph}" Text="&#xE7A7;" FontSize="13" Margin="0,0,6,0"/>
+                                <TextBlock Text="Undo AI changes"/>
+                            </StackPanel>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Click="NewChat_Click" ToolTip="New chat (start a fresh conversation)">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE710;" FontSize="13"/>
+                        </Button>
+                        <TextBlock Style="{StaticResource Title}" Text="AI assistant"/>
+                    </DockPanel>
 
-                <Border Grid.Row="1" Background="White" BorderBrush="#DDD" BorderThickness="1" Padding="8,6" Margin="0,0,0,6">
-                    <StackPanel>
-                        <TextBlock x:Name="UsageText" FontFamily="Consolas" FontSize="11" Foreground="#333"/>
-                        <ProgressBar x:Name="BudgetBar" Height="6" Maximum="100" Margin="0,5,0,0" Visibility="Collapsed"/>
-                        <TextBlock x:Name="IndexText" FontSize="11" Foreground="#777" Margin="0,4,0,0"/>
-                    </StackPanel>
-                </Border>
+                    <Border Grid.Row="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,10"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock x:Name="UsageText" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            <ProgressBar x:Name="BudgetBar" Height="5" Maximum="100" Margin="0,8,0,0" Visibility="Collapsed"/>
+                            <TextBlock x:Name="IndexText" FontSize="11" Margin="0,6,0,0" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                        </StackPanel>
+                    </Border>
 
-                <ScrollViewer Grid.Row="2" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl x:Name="ChatItems">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border x:Name="Bd" Margin="0,3,30,3" Padding="8,6" CornerRadius="6" Background="White" BorderBrush="#DDD" BorderThickness="1">
-                                    <TextBox x:Name="Tx" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" BorderThickness="0"
-                                             Background="Transparent" TextWrapping="Wrap"/>
-                                </Border>
-                                <DataTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding Role}" Value="user">
-                                        <Setter TargetName="Bd" Property="Background" Value="#E3EEFF"/>
-                                        <Setter TargetName="Bd" Property="Margin" Value="30,3,0,3"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Role}" Value="tool">
-                                        <Setter TargetName="Bd" Property="Background" Value="#F0F0F0"/>
-                                        <Setter TargetName="Bd" Property="Padding" Value="6,2"/>
-                                        <Setter TargetName="Tx" Property="FontSize" Value="11"/>
-                                        <Setter TargetName="Tx" Property="Foreground" Value="#666"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Role}" Value="system">
-                                        <Setter TargetName="Bd" Property="Background" Value="#FFF8E1"/>
-                                        <Setter TargetName="Bd" Property="Margin" Value="0,3,0,3"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Role}" Value="error">
-                                        <Setter TargetName="Bd" Property="Background" Value="#FDE8E8"/>
-                                        <Setter TargetName="Bd" Property="Margin" Value="0,3,0,3"/>
-                                    </DataTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                    <ScrollViewer Grid.Row="2" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ChatItems">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="Bd" Margin="0,4,36,4" Padding="12,9" CornerRadius="12" HorizontalAlignment="Left"
+                                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                        <TextBox x:Name="Tx" Style="{StaticResource SelectableText}" Text="{Binding Text, Mode=OneWay}"/>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Role}" Value="user">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="Transparent"/>
+                                            <Setter TargetName="Bd" Property="Margin" Value="36,4,0,4"/>
+                                            <Setter TargetName="Bd" Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter TargetName="Tx" Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Role}" Value="tool">
+                                            <Setter TargetName="Bd" Property="Background" Value="Transparent"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="Transparent"/>
+                                            <Setter TargetName="Bd" Property="Padding" Value="12,1"/>
+                                            <Setter TargetName="Bd" Property="Margin" Value="0,1,0,1"/>
+                                            <Setter TargetName="Tx" Property="FontSize" Value="11"/>
+                                            <Setter TargetName="Tx" Property="FontFamily" Value="Consolas"/>
+                                            <Setter TargetName="Tx" Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Role}" Value="system">
+                                            <Setter TargetName="Bd" Property="Margin" Value="0,4,0,4"/>
+                                            <Setter TargetName="Bd" Property="HorizontalAlignment" Value="Stretch"/>
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                                            <Setter TargetName="Tx" Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Role}" Value="error">
+                                            <Setter TargetName="Bd" Property="Margin" Value="0,4,0,4"/>
+                                            <Setter TargetName="Bd" Property="HorizontalAlignment" Value="Stretch"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
 
-                <DockPanel Grid.Row="3" Margin="0,8,0,0">
-                    <Button DockPanel.Dock="Right" x:Name="SendBtn" Content="Send" Click="Send_Click" Width="64" Margin="6,0,0,0" FontWeight="SemiBold"/>
-                    <TextBox x:Name="ChatInput" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="130"
-                             VerticalScrollBarVisibility="Auto" PreviewKeyDown="ChatInput_PreviewKeyDown"
-                             ToolTip="Enter to send, Shift+Enter for a new line"/>
-                </DockPanel>
-            </Grid>
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="ChatInput" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" MaxHeight="140" Padding="10,8"
+                                 VerticalScrollBarVisibility="Auto" PreviewKeyDown="ChatInput_PreviewKeyDown"
+                                 ToolTip="Enter to send, Shift+Enter for a new line"/>
+                        <Button Grid.Column="1" x:Name="SendBtn" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Content="Send" Click="Send_Click"
+                                VerticalAlignment="Stretch" MinWidth="70"/>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
-    </DockPanel>
+
+        <!-- ============ BOTTOM BAR ============ -->
+        <Grid Grid.Row="2" Margin="2,12,2,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" Style="{StaticResource Caption}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Text="Drop PDFs or images anywhere in this window."/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <TextBlock Style="{StaticResource Glyph}" Text="&#xE8B7;" FontSize="13" Margin="0,0,8,0"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                <TextBox x:Name="OutputBox" Width="360" VerticalContentAlignment="Center" Padding="8,4"
+                         ToolTip="Output folder. Leave blank to save next to the first loaded file."/>
+                <Button Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="BrowseOutput_Click" ToolTip="Choose the output folder">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE712;" FontSize="14"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
 </Window>
