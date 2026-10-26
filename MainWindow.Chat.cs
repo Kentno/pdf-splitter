@@ -54,9 +54,11 @@ public partial class MainWindow
         _chatOpen = open;
         ChatPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         ChatSplitter.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        ChatSplitCol.Width = new GridLength(open ? 10 : 0);
-        ChatCol.Width = new GridLength(open ? 420 : 0);
-        if (open && Width < 1500 && WindowState == WindowState.Normal) Width = 1500;
+        ChatSplitCol.Width = new GridLength(open ? 12 : 0);
+        ChatCol.Width = new GridLength(open ? 430 : 0);
+        ChatToggleBtn.Style = (Style)FindResource(open ? "AccentButton" : "OutlineButton");
+        var wanted = Math.Min(1700, SystemParameters.WorkArea.Width);
+        if (open && Width < wanted && WindowState == WindowState.Normal) Width = wanted;
         if (open) ChatInput.Focus();
     }
 

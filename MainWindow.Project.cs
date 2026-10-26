@@ -53,7 +53,12 @@ public partial class MainWindow
 
     string ProjectDisplayName => _projectPath == null ? "Untitled" : Path.GetFileNameWithoutExtension(_projectPath);
 
-    void UpdateTitle() => Title = $"{ProjectDisplayName}{(_autosavePaused ? " (autosave paused)" : "")} — {AppTitle}";
+    void UpdateTitle()
+    {
+        var paused = _autosavePaused ? " (autosave paused)" : "";
+        Title = $"{ProjectDisplayName}{paused} — {AppTitle}";
+        ProjectNameText.Text = ProjectDisplayName + paused;
+    }
 
     bool IsEmptyProject => _sources.Count == 0 && _splits.Count == 0 && _chat.All(m => m.Role == "system");
 
@@ -175,6 +180,7 @@ public partial class MainWindow
         {
             _suspendDirty = false;
             UpdateTitle();
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => ChatScroll.ScrollToEnd());
         }
         return true;
     }
@@ -316,7 +322,7 @@ public partial class MainWindow
 
     void ProjectMenu_Click(object sender, RoutedEventArgs e)
     {
-        var menu = new ContextMenu { PlacementTarget = ProjectBtn };
+        var menu = new ContextMenu { PlacementTarget = ProjectBtn, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         menu.Items.Add(MenuEntry("New project", () => _ = NewProjectAsync()));
         menu.Items.Add(MenuEntry("Open project...", () => _ = OpenProjectDialogAsync()));
         menu.Items.Add(MenuEntry("Save project as...", () => SaveProjectAs()));

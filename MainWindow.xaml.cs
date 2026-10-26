@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         SplitsList.ItemsSource = _splits;
         InitChat();
         InitProject();
+        InitRedesign();
     }
 
     void SetStatus(string text) => StatusText.Text = text;
