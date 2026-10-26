@@ -39,6 +39,7 @@ public partial class MainWindow
     void AddWelcome()
     {
         _chat.Add(new ChatMessage("system",
+            "This chat uses your API key and is billed per use. For the same help on your Claude plan, use Claude Desktop with the PDF Splitter extension (AI settings).\n\n" +
             "Load your PDFs, then tell me what to do, for example:\n" +
             "• \"This is several books combined — split them by book.\"\n" +
             "• \"Split at every chapter and name the files after the chapter titles.\"\n" +
@@ -73,7 +74,9 @@ public partial class MainWindow
         var s = SettingsStore.Current;
         string model = SettingsStore.Models.FirstOrDefault(m => m.Id == s.Model)?.Label.Split('–')[0].Trim() ?? s.Model;
         string key = SettingsStore.GetApiKey() == null ? "No API key – click AI settings." : "";
-        UsageText.Text = $"{model}\n{UsageTracker.Describe()}" + (key.Length > 0 ? "\n" + key : "");
+        UsageText.Text = $"API key · {model}\n{UsageTracker.Describe()}" + (key.Length > 0 ? "\n" + key : "") +
+            (ClaudeDesktopClients > 0 ? "\nClaude Desktop chats use your plan and aren't counted here." : "");
+        UpdateDesktopTip();
         if (s.MonthlyBudgetUsd > 0)
         {
             BudgetBar.Visibility = Visibility.Visible;
@@ -82,6 +85,38 @@ public partial class MainWindow
             BudgetBar.ToolTip = $"${UsageTracker.MonthCost:F2} of ${s.MonthlyBudgetUsd:F2} monthly limit (estimated)";
         }
         else BudgetBar.Visibility = Visibility.Collapsed;
+    }
+
+    // ---------- Claude Desktop nudge ----------
+
+    bool _apiChatConfirmed;
+
+    void UpdateDesktopTip()
+    {
+        bool connected = ClaudeDesktopClients > 0;
+        if (connected)
+        {
+            DesktopTipText.Text = "Claude Desktop is connected. Chat there to use your Claude plan; messages typed here are billed to your API key.";
+            DesktopTipAction.Visibility = Visibility.Collapsed;
+            DesktopTipClose.Visibility = Visibility.Collapsed;
+            DesktopTip.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            DesktopTipText.Text = "Tip: with the Claude Desktop extension you can do this in Claude Desktop on your plan, with no per-use API charges.";
+            DesktopTipAction.Visibility = Visibility.Visible;
+            DesktopTipClose.Visibility = Visibility.Visible;
+            DesktopTip.Visibility = SettingsStore.Current.HideDesktopTip ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    void DesktopTipAction_Click(object sender, RoutedEventArgs e) => AiSettings_Click(sender, e);
+
+    void DesktopTipClose_Click(object sender, RoutedEventArgs e)
+    {
+        SettingsStore.Current.HideDesktopTip = true;
+        SettingsStore.Save();
+        UpdateDesktopTip();
     }
 
     // ---------- chat ----------
@@ -122,6 +157,17 @@ public partial class MainWindow
         {
             AddChat("error", "Load a PDF first (drop it on the window).");
             return;
+        }
+
+        // Desktop is connected, so this message would cost API money for something the plan covers: ask once per session.
+        if (ClaudeDesktopClients > 0 && !_apiChatConfirmed)
+        {
+            var r = MessageBox.Show(this,
+                "Claude Desktop is connected, so you can ask this there and it will use your Claude plan.\n\n" +
+                "Messages sent here are billed to your API key.\n\nSend this message with your API key anyway?",
+                "Use API key?", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (r != MessageBoxResult.Yes) return;
+            _apiChatConfirmed = true;
         }
 
         ChatInput.Clear();

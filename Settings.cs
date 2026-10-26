@@ -28,6 +28,8 @@ public class AppSettings
     public List<string> RecentProjects { get; set; } = new();
     /// <summary>Full-screen viewer: how many pages before and after the visible ones stay rendered.</summary>
     public int ViewerPreload { get; set; } = 3;
+    /// <summary>User dismissed the "use Claude Desktop instead" tip in the chat panel.</summary>
+    public bool HideDesktopTip { get; set; }
 }
 
 public record ModelOption(string Id, string Label)

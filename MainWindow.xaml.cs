@@ -34,6 +34,7 @@ public partial class MainWindow : Window
         InitProject();
         InitRedesign();
         InitViewer();
+        InitBridge();
     }
 
     void SetStatus(string text) => StatusText.Text = text;
@@ -68,32 +69,38 @@ public partial class MainWindow : Window
         var project = paths.FirstOrDefault(p => p.EndsWith(ProjectExt, StringComparison.OrdinalIgnoreCase));
         if (project != null) { await OpenProjectInteractiveAsync(project); return; }
 
-        var skipped = new List<string>();
-        int added = 0;
-        foreach (var path in paths.Where(File.Exists))
-        {
-            var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (ext != ".pdf" && !ImageExts.Contains(ext))
-            {
-                skipped.Add(Path.GetFileName(path) + " (unsupported type)");
-                continue;
-            }
-            try
-            {
-                SetStatus($"Loading {Path.GetFileName(path)}...");
-                await LoadDocAsync(path);
-                added++;
-            }
-            catch (Exception ex)
-            {
-                skipped.Add($"{Path.GetFileName(path)} ({ex.Message.Trim()})");
-            }
-        }
+        SetStatus("Loading files...");
+        var (loaded, skipped) = await LoadFilesQuietAsync(paths);
+        int added = loaded.Count;
 
         SetStatus($"Loaded {added} file(s)." + (skipped.Count > 0 ? "  Skipped: " + string.Join("; ", skipped) : ""));
         if (skipped.Count > 0)
             MessageBox.Show(this, "Could not load:\n\n" + string.Join("\n", skipped) +
                 "\n\nPassword-protected PDFs are not supported.", "PDF Splitter", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>
+    /// Loads PDFs/images without showing any dialog (also used when Claude Desktop asks over the bridge). A file that is
+    /// already loaded is returned as is. Returns what loaded and a description of what did not.
+    /// </summary>
+    internal async Task<(List<SourceDoc> Loaded, List<string> Failed)> LoadFilesQuietAsync(IEnumerable<string> paths)
+    {
+        var loaded = new List<SourceDoc>();
+        var failed = new List<string>();
+        foreach (var path in paths)
+        {
+            var name = Path.GetFileName(path);
+            if (!File.Exists(path)) { failed.Add($"{path} (not found)"); continue; }
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext != ".pdf" && !ImageExts.Contains(ext)) { failed.Add($"{name} (unsupported type)"); continue; }
+
+            var existing = _sources.FirstOrDefault(d => string.Equals(Path.GetFullPath(d.Path), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+            if (existing != null) { loaded.Add(existing); continue; }
+
+            try { loaded.Add(await LoadDocAsync(path)); }
+            catch (Exception ex) { failed.Add($"{name} ({ex.Message.Trim()})"); }
+        }
+        return (loaded, failed);
     }
 
     /// <summary>Loads one PDF/image as a source (throws on failure). <paramref name="forcedId"/> restores a project's doc id.</summary>

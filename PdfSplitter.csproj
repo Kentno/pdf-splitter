@@ -15,6 +15,11 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Program.cs supplies Main (so the MCP switch can skip WPF entirely); App.xaml is therefore a plain Page -->
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="PDFsharp-wpf" Version="6.2.0" />
     <PackageReference Include="Anthropic" Version="12.60.0" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
