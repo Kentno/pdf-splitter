@@ -51,7 +51,20 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Viewer slot: no selection chrome, just the content -->
+        <Style x:Key="ViewerItem" TargetType="ListBoxItem">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="PlainListBox" TargetType="ListBox">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
@@ -64,6 +77,7 @@
         </Style>
     </Window.Resources>
 
+    <Grid>
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -130,6 +144,10 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="ViewPages_Click"
+                                ToolTip="View pages full screen (or double-click a page)">
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE740;" FontSize="14"/>
+                        </Button>
                         <TextBlock x:Name="PoolInfoText" DockPanel.Dock="Right" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
                         <TextBlock Style="{StaticResource Title}" Text="Pages"/>
                     </DockPanel>
@@ -163,7 +181,8 @@
                                  SelectionChanged="PoolList_SelectionChanged"
                                  PreviewMouseLeftButtonDown="Pool_PreviewMouseLeftButtonDown"
                                  PreviewMouseMove="Pool_PreviewMouseMove"
-                                 PreviewMouseLeftButtonUp="Pool_PreviewMouseLeftButtonUp">
+                                 PreviewMouseLeftButtonUp="Pool_PreviewMouseLeftButtonUp"
+                                 MouseDoubleClick="Pool_MouseDoubleClick">
                             <ListBox.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <local:VirtualizingGridPanel ItemWidth="128" ItemHeight="184"/>
@@ -278,10 +297,15 @@
                                                 <Run Text="{Binding CountText, Mode=OneWay}"/><Run Text=" &#183; "/><Run Text="{Binding Summary, Mode=OneWay}"/>
                                             </TextBlock>
                                         </StackPanel>
-                                        <Button Grid.Column="1" Style="{StaticResource GhostButton}" Margin="6,0,0,0" VerticalAlignment="Top"
-                                                Click="DeleteSplitCard_Click" ToolTip="Delete this split (pages stay in the file)">
-                                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE74D;" FontSize="13"/>
-                                        </Button>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="6,0,0,0">
+                                            <Button Style="{StaticResource GhostButton}" Click="ViewSplit_Click" ToolTip="View this split full screen">
+                                                <TextBlock Style="{StaticResource Glyph}" Text="&#xE740;" FontSize="13"/>
+                                            </Button>
+                                            <Button Style="{StaticResource GhostButton}" Margin="0" Click="DeleteSplitCard_Click"
+                                                    ToolTip="Delete this split (pages stay in the file)">
+                                                <TextBlock Style="{StaticResource Glyph}" Text="&#xE74D;" FontSize="13"/>
+                                            </Button>
+                                        </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
@@ -426,5 +450,172 @@
                 </Button>
             </StackPanel>
         </Grid>
+    </Grid>
+
+    <!-- FULL-SCREEN PAGE VIEWER (covers the whole window; Esc closes) -->
+    <Grid x:Name="ViewerOverlay" Visibility="Collapsed" Focusable="True" Panel.ZIndex="100"
+          Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- top bar -->
+        <Border Grid.Row="0" Padding="16,10" BorderThickness="0,0,0,1"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Style="{StaticResource OutlineButton}" Click="CloseViewer_Click" Margin="0" ToolTip="Back to the page grid (Esc)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE72B;" FontSize="13" Margin="0,0,8,0"/>
+                        <TextBlock Text="Back"/>
+                    </StackPanel>
+                </Button>
+
+                <ComboBox Grid.Column="1" x:Name="ViewerSourceBox" Margin="14,0" MinWidth="280" MaxWidth="560" HorizontalAlignment="Left"
+                          SelectionChanged="ViewerSource_SelectionChanged" ToolTip="What to view: a loaded file, or a split you are building"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
+                    <Button Style="{StaticResource GhostButton}" Click="ViewerPrev_Click" ToolTip="Previous page (Left / PageUp)">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE76B;" FontSize="13"/>
+                    </Button>
+                    <TextBox x:Name="ViewerPageBox" Width="64" TextAlignment="Center" VerticalContentAlignment="Center"
+                             KeyDown="ViewerPageBox_KeyDown" ToolTip="Type a page number and press Enter (G)"/>
+                    <TextBlock x:Name="ViewerPageCount" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                    <Button Style="{StaticResource GhostButton}" Click="ViewerNext_Click" ToolTip="Next page (Right / PageDown)">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE76C;" FontSize="13"/>
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
+                    <Button Style="{StaticResource GhostButton}" Click="ViewerZoomOut_Click" ToolTip="Zoom out (-, Ctrl+wheel)">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE71F;" FontSize="14"/>
+                    </Button>
+                    <TextBlock x:Name="ViewerZoomText" Width="48" TextAlignment="Center" VerticalAlignment="Center" Text="100%"/>
+                    <Button Style="{StaticResource GhostButton}" Click="ViewerZoomIn_Click" ToolTip="Zoom in (+, Ctrl+wheel)">
+                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE8A3;" FontSize="14"/>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Click="ViewerFit_Click" Content="Fit" Margin="0" ToolTip="Fit one whole page to the window height"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center"
+                            ToolTip="How many pages before and after the visible ones stay loaded. Lower uses less memory, higher scrolls more smoothly.">
+                    <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Text="Preload &#177;" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="ViewerPreloadBox" Width="64" SelectionChanged="ViewerPreload_SelectionChanged"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- pages -->
+        <Grid Grid.Row="1">
+            <ListBox x:Name="ViewerList" Style="{StaticResource PlainListBox}" Focusable="False"
+                     ItemContainerStyle="{StaticResource ViewerItem}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <local:VirtualizingGridPanel MaxColumns="1" ScrollStep="160"
+                                                     ItemWidth="{Binding ViewerItemWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                     ItemHeight="{Binding ViewerItemHeight, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                     CacheRows="{Binding ViewerCacheRows, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="12,10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Border x:Name="Paper" BorderThickness="2" CornerRadius="4" BorderBrush="Transparent"
+                                    Background="{DynamicResource ControlAltFillColorSecondaryBrush}">
+                                <Grid>
+                                    <Image Source="{Binding Image}" Stretch="Uniform" Margin="2"
+                                           Loaded="ViewerImage_Loaded" Unloaded="ViewerImage_Unloaded"/>
+                                    <Border x:Name="Tint" IsHitTestVisible="False" Opacity="0"
+                                            Background="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Padding="8,3" CornerRadius="4"
+                                            IsHitTestVisible="False" Background="{DynamicResource AccentFillColorDefaultBrush}">
+                                        <TextBlock Text="{Binding Marker}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Marker}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{Binding Label}" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                <Setter TargetName="Paper" Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding InRange}" Value="True">
+                                <Setter TargetName="Paper" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                                <Setter TargetName="Tint" Property="Opacity" Value="0.10"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel x:Name="ViewerEmpty" Style="{StaticResource EmptyHint}" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource Glyph}" Text="&#xE8A5;" FontSize="40" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                <TextBlock Text="Nothing to show" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4"/>
+                <TextBlock Style="{StaticResource Caption}" HorizontalAlignment="Center" Text="This split has no pages yet."/>
+            </StackPanel>
+        </Grid>
+
+        <!-- range tools -->
+        <Border Grid.Row="2" Padding="16,10" BorderThickness="0,1,0,0"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" x:Name="ViewerRangeText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,16,0"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Style="{StaticResource OutlineButton}" Click="ViewerMarkStart_Click" Content="Mark start (S)"/>
+                    <Button Style="{StaticResource OutlineButton}" Click="ViewerMarkEnd_Click" Content="Mark end (E)"/>
+                    <Button x:Name="ViewerClearBtn" Style="{StaticResource GhostButton}" Click="ViewerClearMarks_Click" Content="Clear" Margin="0,0,14,0"/>
+
+                    <!-- viewing a file: turn the range into a split -->
+                    <StackPanel x:Name="ViewerFileTools" Orientation="Horizontal">
+                        <Button x:Name="ViewerNewSplitBtn" Style="{StaticResource AccentButton}" Click="ViewerNewSplit_Click" Content="New split from range"/>
+                        <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Text="or add to" Margin="4,0,8,0"/>
+                        <ComboBox x:Name="ViewerTargetBox" Width="200" DisplayMemberPath="Name" Margin="0,0,8,0"
+                                  SelectionChanged="ViewerTarget_SelectionChanged"/>
+                        <Button x:Name="ViewerAddBtn" Style="{StaticResource OutlineButton}" Click="ViewerAddToSplit_Click" Content="Add" Margin="0"/>
+                    </StackPanel>
+
+                    <!-- viewing a split: trim pages out of it -->
+                    <StackPanel x:Name="ViewerSplitTools" Orientation="Horizontal" Visibility="Collapsed">
+                        <Button x:Name="ViewerRemoveRangeBtn" Style="{StaticResource AccentButton}" Click="ViewerRemoveRange_Click" Content="Remove range from split"/>
+                        <Button x:Name="ViewerRemovePageBtn" Style="{StaticResource OutlineButton}" Click="ViewerRemovePage_Click" Content="Remove this page" Margin="0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
     </Grid>
 </Window>

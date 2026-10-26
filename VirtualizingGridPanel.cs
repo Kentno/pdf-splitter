@@ -20,13 +20,31 @@ public class VirtualizingGridPanel : VirtualizingPanel, IScrollInfo
         nameof(ItemHeight), typeof(double), typeof(VirtualizingGridPanel),
         new FrameworkPropertyMetadata(160.0, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
 
+    /// <summary>How many rows above and below the visible ones keep their containers (the viewer's "preload N pages").</summary>
+    public static readonly DependencyProperty CacheRowsProperty = DependencyProperty.Register(
+        nameof(CacheRows), typeof(int), typeof(VirtualizingGridPanel),
+        new FrameworkPropertyMetadata(1, FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+    /// <summary>Upper limit for the number of columns (1 gives a single scrolling column of pages).</summary>
+    public static readonly DependencyProperty MaxColumnsProperty = DependencyProperty.Register(
+        nameof(MaxColumns), typeof(int), typeof(VirtualizingGridPanel),
+        new FrameworkPropertyMetadata(int.MaxValue, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
+
+    /// <summary>Pixels per mouse-wheel notch; 0 means half an item.</summary>
+    public static readonly DependencyProperty ScrollStepProperty = DependencyProperty.Register(
+        nameof(ScrollStep), typeof(double), typeof(VirtualizingGridPanel), new PropertyMetadata(0.0));
+
     public double ItemWidth { get => (double)GetValue(ItemWidthProperty); set => SetValue(ItemWidthProperty, value); }
     public double ItemHeight { get => (double)GetValue(ItemHeightProperty); set => SetValue(ItemHeightProperty, value); }
+    public int CacheRows { get => (int)GetValue(CacheRowsProperty); set => SetValue(CacheRowsProperty, value); }
+    public int MaxColumns { get => (int)GetValue(MaxColumnsProperty); set => SetValue(MaxColumnsProperty, value); }
+    public double ScrollStep { get => (double)GetValue(ScrollStepProperty); set => SetValue(ScrollStepProperty, value); }
 
     Size _extent, _viewport;
     double _offsetY;
 
-    int Columns(double width) => Math.Max(1, (int)(width / ItemWidth));
+    int Columns(double width) => Math.Clamp((int)(width / ItemWidth), 1, Math.Max(1, MaxColumns));
+    double WheelStep => ScrollStep > 0 ? ScrollStep : ItemHeight / 2;
 
     // ---------- layout ----------
 
@@ -42,8 +60,9 @@ public class VirtualizingGridPanel : VirtualizingPanel, IScrollInfo
         int rows = (count + cols - 1) / cols;
         UpdateScrollInfo(new Size(width, rows * ItemHeight), new Size(width, height));
 
-        int firstRow = Math.Max(0, (int)(_offsetY / ItemHeight) - 1);
-        int lastRow = (int)((_offsetY + height) / ItemHeight) + 1;
+        int cache = Math.Max(0, CacheRows);
+        int firstRow = Math.Max(0, (int)(_offsetY / ItemHeight) - cache);
+        int lastRow = (int)((_offsetY + height) / ItemHeight) + cache;
         int first = Math.Min(count, firstRow * cols);
         int last = Math.Min(count - 1, (lastRow + 1) * cols - 1);
 
@@ -155,14 +174,23 @@ public class VirtualizingGridPanel : VirtualizingPanel, IScrollInfo
     public void LineDown() => SetVerticalOffset(_offsetY + 40);
     public void PageUp() => SetVerticalOffset(_offsetY - _viewport.Height);
     public void PageDown() => SetVerticalOffset(_offsetY + _viewport.Height);
-    public void MouseWheelUp() => SetVerticalOffset(_offsetY - ItemHeight / 2);
-    public void MouseWheelDown() => SetVerticalOffset(_offsetY + ItemHeight / 2);
+    public void MouseWheelUp() => SetVerticalOffset(_offsetY - WheelStep);
+    public void MouseWheelDown() => SetVerticalOffset(_offsetY + WheelStep);
     public void LineLeft() { }
     public void LineRight() { }
     public void PageLeft() { }
     public void PageRight() { }
     public void MouseWheelLeft() { }
     public void MouseWheelRight() { }
+
+    /// <summary>Lets ListBox.ScrollIntoView work: scroll just far enough to show the item's row.</summary>
+    protected override void BringIndexIntoView(int index)
+    {
+        int cols = Columns(_viewport.Width);
+        double top = index / cols * ItemHeight;
+        if (top < _offsetY) SetVerticalOffset(top);
+        else if (top + ItemHeight > _offsetY + _viewport.Height) SetVerticalOffset(top + ItemHeight - _viewport.Height);
+    }
 
     public Rect MakeVisible(Visual visual, Rect rectangle)
     {
