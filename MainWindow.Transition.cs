@@ -13,7 +13,7 @@ namespace PdfSplitter;
 /// </summary>
 public partial class MainWindow
 {
-    const int TransitionMs = 460;
+    const int TransitionMs = 368;       // flight time; every other timing below is scaled to match
     static readonly IEasingFunction TransitionEase = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
     bool _animating;
@@ -120,10 +120,10 @@ public partial class MainWindow
         if (!fadeIn && fadeOut == FadeOut.None) return;
         var a = new DoubleAnimationUsingKeyFrames { Duration = Ms(delayMs + durationMs), FillBehavior = FillBehavior.HoldEnd };
         a.KeyFrames.Add(new LinearDoubleKeyFrame(fadeIn ? 0 : 1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        if (fadeIn) a.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(Ms(delayMs + 150))));
+        if (fadeIn) a.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(Ms(delayMs + 120))));
         if (fadeOut != FadeOut.None)
         {
-            double from = fadeOut == FadeOut.Early ? 0.25 : 1 - 230 / durationMs;
+            double from = fadeOut == FadeOut.Early ? 0.25 : 1 - 185 / durationMs;
             double to = fadeOut == FadeOut.Early ? 0.7 : 1.0;
             a.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(Ms(delayMs + durationMs * from))));
             a.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(Ms(delayMs + durationMs * to))));
@@ -169,11 +169,13 @@ public partial class MainWindow
     async Task PlayOpenAsync(OpenPlan plan, ViewerSource source, int current)
     {
         _animating = true;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             ViewerOverlay.UpdateLayout();
             var reference = ViewerPageImageRect(current);     // where page `current` ends up; the other pages stack above and below it
             double dur = TransitionMs;
+            Renderer.Trace($"open start (flight {dur} ms)");
 
             var backdrop = MakeBackdrop(plan.Backdrop, 10);
             Fly(backdrop, WindowRect, 0, dur);
@@ -183,7 +185,7 @@ public partial class MainWindow
             foreach (var g in plan.Ghosts.OrderByDescending(x => Math.Abs(x.Page - current)))
             {
                 int rank = Math.Abs(g.Page - current);
-                double delay = Math.Min(140, rank * 14);
+                double delay = Math.Min(112, rank * 11);
                 var ghost = MakeGhost(g.Image, g.Start);
                 var to = new Rect(reference.X, reference.Y + (g.Page - current) * ViewerItemHeight, reference.Width, reference.Height);
                 Fly(ghost, to, delay, dur);
@@ -192,16 +194,19 @@ public partial class MainWindow
                     FillGhost(ghost, source.Split.Pages[g.Page]);
             }
 
-            ViewerOverlay.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Ms(240)) { BeginTime = Ms(dur - 200) });
-            await Task.Delay((int)dur + 60);
+            ViewerOverlay.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Ms(190)) { BeginTime = Ms(dur - 160) });
+            await Task.Delay((int)dur + 20);
 
             // The real viewer is now underneath. Keep the copies until it has its sharp render of the page we landed on
             // (they only show a thumbnail), then dissolve them so the reveal is a crisp page, not a blur.
             var landed = _vpages[current];
-            for (int waited = 0; !landed.IsSharp && waited < 700; waited += 25) await Task.Delay(25);
+            Renderer.Trace($"open landed at {clock.ElapsedMilliseconds} ms, sharp={landed.IsSharp}");
+            for (int waited = 0; !landed.IsSharp && waited < 500; waited += 10) await Task.Delay(10);
+            Renderer.Trace($"open sharp at {clock.ElapsedMilliseconds} ms, sharp={landed.IsSharp}");
             // Fade the whole layer as one group: faded separately, the grey backdrop would show over the white page mid-fade.
-            TransitionLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, Ms(150)));
-            await Task.Delay(170);
+            TransitionLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(0, Ms(90)));
+            await Task.Delay(100);
+            Renderer.Trace($"open done at {clock.ElapsedMilliseconds} ms");
         }
         finally
         {
@@ -274,7 +279,7 @@ public partial class MainWindow
         ViewerOverlay.IsHitTestVisible = false;
         try
         {
-            double dur = TransitionMs - 70;
+            double dur = TransitionMs - 56;
 
             var backdrop = MakeBackdrop(plan.BackdropFrom, 0);
             Fly(backdrop, plan.BackdropTo, 0, dur);
@@ -287,7 +292,7 @@ public partial class MainWindow
                 FadePlan(ghost, false, g.Lands ? FadeOut.None : FadeOut.AtEnd, 0, dur);
             }
             ViewerOverlay.Opacity = 0;   // the backdrop and copies already cover it; the real viewer can go
-            await Task.Delay((int)dur + 60);
+            await Task.Delay((int)dur + 20);
         }
         finally
         {

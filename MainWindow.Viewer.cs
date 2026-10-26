@@ -205,6 +205,13 @@ public partial class MainWindow
         _vcurrent = -1;
 
         ApplyGeometry();
+
+        // Start the sharp render of the page we are about to show right away, so it is already cached when its slot appears
+        // (during the open animation the render runs while the pages are still flying in).
+        if (_vpages.Count > 0)
+            Renderer.Request(_vpages[Math.Clamp(pageIndex, 0, _vpages.Count - 1)].Ref, ViewerTargetWidth(),
+                () => (int)RenderPriority.ViewerCurrent, 0, _ => { });
+
         ViewerList.ItemsSource = _vpages;
         ViewerEmpty.Visibility = _vpages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ViewerPageCount.Text = $"/ {_vpages.Count:N0}";
@@ -313,7 +320,8 @@ public partial class MainWindow
 
         bool near = Math.Abs(vp.Position - 1 - _vcurrent) <= 1;
         vp.IsSharp = false;
-        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), near ? 50 : 220, img => { vp.Image = img; vp.IsSharp = true; });
+        int settle = vp.Position - 1 == _vcurrent ? 0 : near ? 50 : 220;   // the page you are on does not wait
+        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), settle, img => { vp.Image = img; vp.IsSharp = true; });
 
         if (vp.Image != null) return;   // the sharp image came straight from the cache, or an older image is still showing
         vp.Image = vp.Ref.Thumb;
