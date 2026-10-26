@@ -23,16 +23,11 @@
                                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                                 Background="{DynamicResource ControlFillColorDefaultBrush}">
                             <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <!-- Dragging pages over the card: the half under the cursor lights up (top = insert at start, bottom = add at end) -->
-                                <Border x:Name="TopTint" Grid.Row="0" Visibility="Collapsed" CornerRadius="7,7,0,0" IsHitTestVisible="False"
-                                        Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0.22"/>
-                                <Border x:Name="BottomTint" Grid.Row="1" Visibility="Collapsed" CornerRadius="0,0,7,7" IsHitTestVisible="False"
-                                        Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0.22"/>
-                                <ContentPresenter Grid.RowSpan="2"/>
+                                <ContentPresenter/>
+                                <!-- Selection and drop feedback is drawn inside the card, so the card never changes size.
+                                     While dragging pages over it, the edge under the cursor is thicker (top = insert at start, bottom = add at end). -->
+                                <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="7" BorderThickness="2" IsHitTestVisible="False"
+                                        BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -40,20 +35,19 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
                             </Trigger>
                             <Trigger Property="Tag" Value="drop-top">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
                                 <Setter TargetName="Bd" Property="Effect" Value="{StaticResource DropGlow}"/>
-                                <Setter TargetName="TopTint" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ring" Property="BorderThickness" Value="2,6,2,2"/>
                             </Trigger>
                             <Trigger Property="Tag" Value="drop-bottom">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
                                 <Setter TargetName="Bd" Property="Effect" Value="{StaticResource DropGlow}"/>
-                                <Setter TargetName="BottomTint" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ring" Property="BorderThickness" Value="2,2,2,6"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
