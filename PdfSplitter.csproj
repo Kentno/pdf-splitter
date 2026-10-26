@@ -15,7 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="PDFsharp-wpf" Version="6.2.0" />
-    <PackageReference Include="Anthropic" Version="12.*" />
+    <PackageReference Include="Anthropic" Version="12.60.0" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,26 @@
-﻿bin/
+﻿# Build output
+bin/
 obj/
 publish/
 .vs/
 *.user
+
+# User data that must never be committed: projects hold file paths and chat text,
+# PDFs are the user's documents (only the generated samples are tracked)
+*.pdfsplit
+*.pdfsplit.bad
+*.pdf
+!samples/*.pdf
+
+# Local app settings (contain the encrypted API key) and anything key-like
+settings.json
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Temp files
+*.tmp
+*.bak
