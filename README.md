@@ -4,6 +4,8 @@ A Windows desktop app for splitting large PDFs into several smaller ones. Load a
 
 Everything runs locally. Your PDFs are never uploaded unless you use the AI assistant, and then only the text it reads is sent.
 
+**[Download the latest release](https://github.com/Kentno/pdf-splitter/releases/latest)** (a single `PdfSplitter.exe`, see [Install](#install)).
+
 ## Features
 
 - **Load PDFs and images.** Drag files onto the window or use Add files. Images become single-page PDFs. Several files can be open at once.
@@ -24,7 +26,7 @@ There are two ways to use it.
 
 PDF Splitter can be installed as an extension in Claude Desktop. You chat in Claude Desktop, Claude uses the app's tools, and the usage comes out of your Claude plan. No API key is needed.
 
-1. In PDF Splitter open AI settings and choose Create extension file.
+1. Get the app from the [latest release](https://github.com/Kentno/pdf-splitter/releases/latest). In PDF Splitter open AI settings and choose Create extension file.
 2. In Claude Desktop go to Settings, then Extensions, then Install Extension, and pick the file.
 3. Ask Claude to work on a file, for example "Split C:\path\to\my.pdf by book".
 
@@ -36,7 +38,12 @@ The chat panel in the app calls the Claude API with your own Anthropic API key, 
 
 ## Install
 
-Download or build `PdfSplitter.exe`. It is a single self-contained file, so nothing else needs to be installed. It targets 64-bit Windows 10 (version 2004) or later.
+1. Download `PdfSplitter.exe` from the [latest release](https://github.com/Kentno/pdf-splitter/releases/latest).
+2. Put it anywhere you like and run it. There is no installer.
+
+It is a single self-contained file of about 77 MB, so nothing else needs to be installed. It needs 64-bit Windows 10 (version 2004) or later.
+
+The exe is not code-signed, so Windows SmartScreen may warn you the first time you run it. Choose More info, then Run anyway. Each release lists the file's SHA-256 hash so you can check your download. You can also build it yourself, see below.
 
 ## Build
 
