@@ -139,6 +139,7 @@ public partial class MainWindow
 
         SetBusy(false);
         RefreshUsage();
+        MarkDirty();   // persist the finished conversation
     }
 
     void SetBusy(bool busy)
