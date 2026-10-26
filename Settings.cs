@@ -26,6 +26,8 @@ public class AppSettings
     public UsageTotals Usage { get; set; } = new();
     public string? LastProjectPath { get; set; }
     public List<string> RecentProjects { get; set; } = new();
+    /// <summary>Full-screen viewer: how many pages before and after the visible ones stay rendered.</summary>
+    public int ViewerPreload { get; set; } = 3;
 }
 
 public record ModelOption(string Id, string Label)

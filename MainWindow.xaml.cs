@@ -34,6 +34,7 @@ public partial class MainWindow : Window
         InitChat();
         InitProject();
         InitRedesign();
+        InitViewer();
     }
 
     void SetStatus(string text) => StatusText.Text = text;
@@ -149,7 +150,9 @@ public partial class MainWindow : Window
         if (sender is FrameworkElement { DataContext: PageRef p }) p.Thumb = null;
     }
 
-    static async Task<ImageSource?> RenderAsync(PageRef p, uint width)
+    /// <param name="stillWanted">Checked once the render slot is free; returns null without rendering if it says no
+    /// (the page scrolled away while queued).</param>
+    static async Task<ImageSource?> RenderAsync(PageRef p, uint width, Func<bool>? stillWanted = null)
     {
         if (p.Doc.IsImage)
         {
@@ -166,6 +169,7 @@ public partial class MainWindow : Window
         await RenderGate.WaitAsync();
         try
         {
+            if (stillWanted != null && !stillWanted()) return null;
             using var page = p.Doc.Pdf!.GetPage((uint)p.Index);
             using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
             await page.RenderToStreamAsync(ms, new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = width });
