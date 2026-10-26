@@ -15,7 +15,6 @@ namespace PdfSplitter;
 public partial class MainWindow : Window
 {
     static readonly string[] ImageExts = { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff" };
-    static readonly SemaphoreSlim RenderGate = new(2);
 
     readonly ObservableCollection<SourceDoc> _sources = new();
     readonly ObservableCollection<PageRef> _pool = new();
@@ -131,58 +130,36 @@ public partial class MainWindow : Window
             for (int i = s.Pages.Count - 1; i >= 0; i--)
                 if (s.Pages[i].Doc == doc) s.Pages.RemoveAt(i);
         doc.Cts.Cancel();
+        Renderer.Forget(doc);
         _sources.Remove(doc);
         SetStatus($"Removed {doc.Name}.");
     }
 
     // ---------- thumbnails ----------
 
-    async void Thumb_Loaded(object sender, RoutedEventArgs e)
+    /// <summary>Thumbnail render width in pixels: the tile image is 104 DIPs wide, with some headroom for sharpness.</summary>
+    uint ThumbWidth => (uint)Math.Ceiling(104 * VisualTreeHelper.GetDpi(this).DpiScaleX * 1.25);
+
+    // Tiles ask for their thumbnail when they appear and withdraw the request when they scroll away. A request only
+    // starts after a short settle delay, so tiles that fly past during a scrollbar drag are never rendered.
+    // The page is remembered in Tag: when a tile is recycled WPF clears its DataContext *before* Unloaded fires,
+    // so Unloaded could not otherwise tell which page to cancel.
+    void Thumb_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: PageRef p } && p.Thumb == null)
-        {
-            try { p.Thumb = await RenderAsync(p, 200); } catch { /* leave blank */ }
-        }
+        if (sender is not FrameworkElement { DataContext: PageRef p } fe) return;
+        fe.Tag = p;
+        if (p.Thumb != null) return;
+        p.ThumbRequest?.Cancel();
+        p.ThumbRequest = Renderer.Request(p, ThumbWidth, () => (int)RenderPriority.Grid, 70, img => p.Thumb = img);
     }
 
     void Thumb_Unloaded(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: PageRef p }) p.Thumb = null;
-    }
-
-    /// <param name="stillWanted">Checked once the render slot is free; returns null without rendering if it says no
-    /// (the page scrolled away while queued).</param>
-    static async Task<ImageSource?> RenderAsync(PageRef p, uint width, Func<bool>? stillWanted = null)
-    {
-        if (p.Doc.IsImage)
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.UriSource = new Uri(p.Doc.Path);
-            bmp.DecodePixelWidth = (int)width;
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.EndInit();
-            bmp.Freeze();
-            return bmp;
-        }
-
-        await RenderGate.WaitAsync();
-        try
-        {
-            if (stillWanted != null && !stillWanted()) return null;
-            using var page = p.Doc.Pdf!.GetPage((uint)p.Index);
-            using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-            await page.RenderToStreamAsync(ms, new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = width });
-            ms.Seek(0);
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.StreamSource = ms.AsStreamForRead();
-            bmp.EndInit();
-            bmp.Freeze();
-            return bmp;
-        }
-        finally { RenderGate.Release(); }
+        if (sender is not FrameworkElement { Tag: PageRef p } fe) return;
+        fe.Tag = null;
+        p.ThumbRequest?.Cancel();
+        p.ThumbRequest = null;
+        p.Thumb = null;   // the image stays in the renderer's cache, so scrolling back is instant
     }
 
     // ---------- creating splits ----------

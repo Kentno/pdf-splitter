@@ -213,7 +213,7 @@ public partial class MainWindow
     /// <summary>Clears documents, splits, chat and usage so another project can be loaded.</summary>
     void ResetState()
     {
-        foreach (var d in _sources) d.Cts.Cancel();
+        foreach (var d in _sources) { d.Cts.Cancel(); Renderer.Forget(d); }
         _sources.Clear();
         _pool.Clear();
         _splits.Clear();
