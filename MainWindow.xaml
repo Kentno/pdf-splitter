@@ -104,7 +104,18 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="ChatToggleBtn" Style="{StaticResource OutlineButton}" Click="ToggleChat_Click" ToolTip="Show or hide the AI assistant">
+                <!-- Lit while Claude Desktop is connected through the extension -->
+                <Border x:Name="McpPill" Visibility="Collapsed" CornerRadius="14" Padding="12,5" Margin="0,0,10,0" VerticalAlignment="Center"
+                        Cursor="Hand" BorderThickness="1"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        ToolTip="Claude Desktop is connected and can use PDF Splitter's tools. Click for details."
+                        MouseLeftButtonUp="McpPill_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center" Fill="{DynamicResource SystemFillColorSuccessBrush}"/>
+                        <TextBlock x:Name="McpPillText" Text="Claude Desktop" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <Button x:Name="ChatToggleBtn" Style="{StaticResource OutlineButton}" Click="ToggleChat_Click" ToolTip="Show or hide the AI assistant (uses your API key)">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Glyph}" Text="&#xE8BD;" Margin="0,0,8,0" FontSize="14"/>
                         <TextBlock Text="AI assistant"/>

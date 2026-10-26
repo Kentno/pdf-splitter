@@ -13,10 +13,29 @@
         </Style>
     </Window.Resources>
     <StackPanel Margin="16">
-        <!-- API key -->
+        <!-- Claude Desktop (uses your Claude plan) -->
         <Border Style="{StaticResource Card}">
             <StackPanel>
-                <TextBlock Style="{StaticResource Title}" Text="Anthropic API key"/>
+                <TextBlock Style="{StaticResource Title}" Text="Use Claude Desktop (your Claude plan)"/>
+                <TextBlock Style="{StaticResource Caption}" Margin="2,6,0,0" TextWrapping="Wrap"
+                           Text="Install PDF Splitter as an extension in Claude Desktop, then chat there: Claude uses this app's tools and your changes appear here live. The conversation counts against your Claude plan, not API billing, so no API key is needed for this."/>
+                <StackPanel Orientation="Horizontal" Margin="2,10,0,0">
+                    <Ellipse x:Name="McpDot" Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="McpStatus" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="500"/>
+                </StackPanel>
+                <WrapPanel Margin="0,12,0,0">
+                    <Button Style="{StaticResource AccentButton}" Content="Create extension file..." Click="CreateMcpb_Click"/>
+                    <Button Style="{StaticResource OutlineButton}" Content="How to install" Click="HowToInstall_Click"/>
+                    <Button Style="{StaticResource OutlineButton}" Content="Copy manual config" Click="CopyConfig_Click"/>
+                </WrapPanel>
+                <TextBlock x:Name="McpResult" Margin="2,6,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- API key -->
+        <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+            <StackPanel>
+                <TextBlock Style="{StaticResource Title}" Text="Anthropic API key (for the in-app assistant)"/>
                 <PasswordBox x:Name="KeyBox" Padding="8,6" Margin="0,10,0,0"/>
                 <TextBlock x:Name="KeyStatus" Style="{StaticResource Caption}" Margin="2,6,0,8" TextWrapping="Wrap"/>
                 <WrapPanel>

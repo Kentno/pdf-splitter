@@ -17,6 +17,77 @@ public partial class SettingsWindow : Window
         OcrBox.IsChecked = s.BackgroundOcr;
         RefreshKey();
         RefreshUsage();
+
+        // The owner is assigned after construction, so check the Claude Desktop connection once shown and keep it current.
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) => RefreshMcp();
+        Loaded += (_, _) => { RefreshMcp(); timer.Start(); };
+        Closed += (_, _) => timer.Stop();
+    }
+
+    // ---------- Claude Desktop extension ----------
+
+    void RefreshMcp()
+    {
+        bool connected = (Owner as MainWindow)?.ClaudeDesktopClients > 0;
+        McpDot.Fill = connected ? System.Windows.Media.Brushes.MediumSeaGreen : System.Windows.Media.Brushes.Gray;
+        McpStatus.Text = connected
+            ? "Claude Desktop is connected."
+            : "Not connected. Install the extension, then open Claude Desktop (it connects when it starts the extension).";
+    }
+
+    async void CreateMcpb_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Save the Claude Desktop extension",
+            FileName = "PDF Splitter.mcpb",
+            Filter = "Claude Desktop extension|*.mcpb",
+            DefaultExt = ".mcpb",
+            AddExtension = true,
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        McpResult.Foreground = System.Windows.Media.Brushes.Gray;
+        McpResult.Text = "Creating the extension (about 70 MB)...";
+        try
+        {
+            await Task.Run(() => McpbBuilder.Create(dlg.FileName));
+            McpResult.Foreground = System.Windows.Media.Brushes.DarkGreen;
+            McpResult.Text = "Saved. Now install it in Claude Desktop (see How to install).";
+            Process.Start("explorer.exe", $"/select,\"{dlg.FileName}\"");
+        }
+        catch (Exception ex)
+        {
+            McpResult.Foreground = System.Windows.Media.Brushes.Firebrick;
+            McpResult.Text = "Could not create the extension: " + ex.Message;
+        }
+    }
+
+    void HowToInstall_Click(object sender, RoutedEventArgs e) =>
+        MessageBox.Show(this,
+            "1. Click \"Create extension file...\" and save the .mcpb file.\n\n" +
+            "2. In Claude Desktop open Settings > Extensions > Advanced settings > Install Extension... and choose that file.\n" +
+            "   (Menu names can differ slightly between Claude Desktop versions.)\n\n" +
+            "3. Start a chat in Claude Desktop and ask, for example: \"Split C:\\path\\to\\my.pdf by book.\" " +
+            "PDF Splitter opens by itself if it is closed, and the \"Claude Desktop\" indicator lights up here while it is connected.\n\n" +
+            "Claude Desktop may ask you to approve each tool the first time; \"Always allow\" for the read-only ones saves clicks.\n\n" +
+            "After updating PDF Splitter, create and install the extension again so it runs the new version.",
+            "Use Claude Desktop", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    void CopyConfig_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Clipboard.SetText(McpbBuilder.ConfigSnippet());
+            McpResult.Foreground = System.Windows.Media.Brushes.DarkGreen;
+            McpResult.Text = "Copied. In Claude Desktop: Settings > Developer > Edit Config, merge it into claude_desktop_config.json, then restart Claude Desktop.";
+        }
+        catch (Exception ex)
+        {
+            McpResult.Foreground = System.Windows.Media.Brushes.Firebrick;
+            McpResult.Text = "Could not copy: " + ex.Message;
+        }
     }
 
     void RefreshKey() => KeyStatus.Text = SettingsStore.DescribeKey();

@@ -36,7 +36,23 @@ public class AgentTools
         InputSchema = new() { Properties = ToDict(props), Required = required.Length > 0 ? required.ToList() : null },
     };
 
-    public List<ToolUnion> Definitions() => new()
+    /// <summary>The in-app assistant (API key) gets these.</summary>
+    public List<ToolUnion> Definitions() => BaseTools().Select(t => (ToolUnion)t).ToList();
+
+    /// <summary>External clients (Claude Desktop over MCP) get the same tools plus two that only make sense there.</summary>
+    public static List<Tool> ExternalTools()
+    {
+        var tools = BaseTools();
+        tools.Add(Def("open_files",
+            "Load PDF or image files from disk into PDF Splitter by full path (e.g. C:\\Users\\me\\Downloads\\book.pdf). Use this when list_documents is empty or the user names a file. Loading the same path twice is harmless. Returns the document ids to use with the other tools.",
+            new { paths = new { type = "array", description = "Full file paths (max 20)", items = new { type = "string" } } }, "paths"));
+        tools.Add(Def("get_app_state",
+            "One-call overview of the app: project name, output folder, loaded documents and the current splits.",
+            new { }));
+        return tools;
+    }
+
+    static List<Tool> BaseTools() => new()
     {
         Def("list_documents",
             "List the loaded files with page counts and text/OCR readiness. Call this first.",
@@ -160,6 +176,8 @@ public class AgentTools
                 "add_pages_to_split" => AddPages(a),
                 "rename_split" => Rename(a),
                 "delete_split" => Delete(a),
+                "open_files" => await OpenFiles(a),
+                "get_app_state" => GetAppState(),
                 _ => throw new ToolError($"Unknown tool '{name}'."),
             };
             return (Clip(JsonSerializer.Serialize(result, JsonOpts), MaxResultChars), false);
@@ -168,6 +186,29 @@ public class AgentTools
         catch (OperationCanceledException) { throw; }
         catch (Exception e) { return ($"{e.GetType().Name}: {e.Message}", true); }
     }
+
+    async Task<object> OpenFiles(IReadOnlyDictionary<string, JsonElement> a)
+    {
+        if (!a.TryGetValue("paths", out var arr) || arr.ValueKind != JsonValueKind.Array) throw new ToolError("Missing 'paths' array.");
+        var paths = arr.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!).Take(20).ToList();
+        if (paths.Count == 0) throw new ToolError("No paths given.");
+
+        var (loaded, failed) = await await _w.Dispatcher.InvokeAsync(() => _w.LoadFilesQuietAsync(paths));
+        return new
+        {
+            loaded = loaded.Select(d => new { doc = d.Id, name = d.Name, pages = d.PageCount }),
+            failed,
+            note = "Text is read in the background; scanned pages are OCR'd automatically.",
+        };
+    }
+
+    object GetAppState() => UI<object>(() => new
+    {
+        project = _w.ProjectName,
+        output_folder = string.IsNullOrWhiteSpace(_w.OutputFolderText) ? "(next to the first loaded file)" : _w.OutputFolderText,
+        documents = _w.Sources.Select(d => new { doc = d.Id, name = d.Name, pages = d.PageCount }).ToList(),
+        splits = _w.Splits.Select((s, i) => new { split = i + 1, name = s.Name, pages = s.Pages.Count, summary = s.Summary }).ToList(),
+    });
 
     object ListDocuments() => new
     {

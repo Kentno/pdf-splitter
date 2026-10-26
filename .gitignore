@@ -24,3 +24,6 @@ settings.json
 # Temp files
 *.tmp
 *.bak
+
+# Built Claude Desktop extension (about 70 MB)
+*.mcpb
