@@ -36,6 +36,7 @@ public partial class MainWindow
         bool connected = ClaudeDesktopClients > 0;
         McpPill.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
         McpPillText.Text = "Claude Desktop";
+        RefreshUsage();
         SetStatus(connected ? "Claude Desktop is connected. Ask it to work on your files; changes appear here as it goes."
                             : "Claude Desktop disconnected.");
     }

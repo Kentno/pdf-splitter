@@ -14,7 +14,10 @@ namespace PdfSplitter;
 /// </summary>
 public static class Bridge
 {
-    public static string PipeName => "PdfSplitter-bridge-" + Environment.UserName.Replace('\\', '_').Replace('/', '_');
+    /// <summary>One per Windows user. PDFSPLITTER_PIPE overrides the name so tests can run beside a real instance without touching it.</summary>
+    public static string PipeName => Environment.GetEnvironmentVariable("PDFSPLITTER_PIPE") is { Length: > 0 } custom
+        ? custom
+        : "PdfSplitter-bridge-" + Environment.UserName.Replace('\\', '_').Replace('/', '_');
 
     static string AppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PdfSplitter");
 

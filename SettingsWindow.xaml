@@ -35,7 +35,7 @@
         <!-- API key -->
         <Border Style="{StaticResource Card}" Margin="0,12,0,0">
             <StackPanel>
-                <TextBlock Style="{StaticResource Title}" Text="Anthropic API key (for the in-app assistant)"/>
+                <TextBlock Style="{StaticResource Title}" Text="Anthropic API key (in-app assistant, billed per use)"/>
                 <PasswordBox x:Name="KeyBox" Padding="8,6" Margin="0,10,0,0"/>
                 <TextBlock x:Name="KeyStatus" Style="{StaticResource Caption}" Margin="2,6,0,8" TextWrapping="Wrap"/>
                 <WrapPanel>
@@ -64,7 +64,7 @@
         <!-- Usage -->
         <Border Style="{StaticResource Card}" Margin="0,12,0,0">
             <StackPanel>
-                <TextBlock Style="{StaticResource Title}" Text="Usage"/>
+                <TextBlock Style="{StaticResource Title}" Text="API usage (not Claude Desktop)"/>
                 <Border Margin="0,10,0,0" Padding="12,10" CornerRadius="8"
                         Background="{DynamicResource ControlFillColorDefaultBrush}"
                         BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
