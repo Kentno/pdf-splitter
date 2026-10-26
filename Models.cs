@@ -42,6 +42,9 @@ public class PageRef : Notifier
 
     ImageSource? _thumb;
     public ImageSource? Thumb { get => _thumb; set { _thumb = value; Raise(); } }
+
+    /// <summary>The pending thumbnail render for this page's tile, if any.</summary>
+    internal RenderRequest? ThumbRequest { get; set; }
 }
 
 public class SplitItem : Notifier

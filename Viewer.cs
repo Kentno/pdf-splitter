@@ -25,8 +25,8 @@ public class ViewerPage : Notifier
     public int Position { get; }          // 1-based position within the current view
     public string Label { get; }
 
-    /// <summary>Bumped on every (re)load and on unload so stale renders can tell they are no longer wanted.</summary>
-    public int Token;
+    /// <summary>Pending renders for this slot; cancelled when the slot scrolls out of the preload window.</summary>
+    internal RenderRequest? PreviewRequest, SharpRequest;
 
     ImageSource? _image;
     public ImageSource? Image { get => _image; set { _image = value; Raise(); } }

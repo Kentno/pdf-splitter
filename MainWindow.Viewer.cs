@@ -177,7 +177,7 @@ public partial class MainWindow
 
     void LoadView(ViewerSource src, int pageIndex)
     {
-        foreach (var p in _vloaded) p.Token++;   // pending renders for the old view are no longer wanted
+        foreach (var p in _vloaded) CancelViewerRequests(p);   // pending renders for the old view are no longer wanted
         _vloaded.Clear();
         _vflagged.Clear();
         _markA = _markB = -1;
@@ -254,40 +254,56 @@ public partial class MainWindow
         return (uint)Math.Min(2600, Math.Max(200, ViewerBaseWidth * _vzoom * dpi));
     }
 
+    // As with grid tiles, the slot is remembered in Tag because DataContext is already cleared when Unloaded fires.
     void ViewerImage_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: ViewerPage vp }) return;
+        if (sender is not FrameworkElement { DataContext: ViewerPage vp } fe) return;
+        fe.Tag = vp;
         _vloaded.Add(vp);
-        _ = LoadViewerPageAsync(vp);
+        LoadViewerPage(vp);
     }
 
     void ViewerImage_Unloaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: ViewerPage vp }) return;
+        if (sender is not FrameworkElement { Tag: ViewerPage vp } fe) return;
+        fe.Tag = null;
         _vloaded.Remove(vp);
-        vp.Token++;
-        vp.Image = null;   // outside the preload window: free the bitmap
+        CancelViewerRequests(vp);
+        vp.Image = null;   // outside the preload window: free the bitmap (it stays in the renderer's cache)
     }
 
-    async Task LoadViewerPageAsync(ViewerPage vp)
+    static void CancelViewerRequests(ViewerPage vp)
     {
-        int token = ++vp.Token;
-        bool Wanted() => vp.Token == token && _vloaded.Contains(vp);
+        vp.PreviewRequest?.Cancel();
+        vp.SharpRequest?.Cancel();
+        vp.PreviewRequest = vp.SharpRequest = null;
+    }
 
-        // Show something immediately: the grid's thumbnail if it has one, else a quick small render.
-        vp.Image ??= vp.Ref.Thumb;
-        try
-        {
-            if (vp.Image == null)
-            {
-                var small = await RenderAsync(vp.Ref, 320, Wanted);
-                if (!Wanted()) return;
-                if (small != null && vp.Image == null) vp.Image = small;
-            }
-            var sharp = await RenderAsync(vp.Ref, ViewerTargetWidth(), Wanted);
-            if (Wanted() && sharp != null) vp.Image = sharp;
-        }
-        catch { /* leave whatever is shown */ }
+    /// <summary>The page being read renders first, its neighbours next, the rest of the preload window last.</summary>
+    int ViewerPriority(ViewerPage vp)
+    {
+        int distance = Math.Abs(vp.Position - 1 - _vcurrent);
+        return distance == 0 ? (int)RenderPriority.ViewerCurrent : distance == 1 ? (int)RenderPriority.ViewerNear : (int)RenderPriority.ViewerPreload;
+    }
+
+    const uint ViewerPreviewWidth = 280;
+
+    /// <summary>
+    /// Shows something at once (cached image, the grid's thumbnail, or a quick small render), then upgrades it to a
+    /// sharp render. Both wait briefly to see whether the page is still wanted; the page you are on waits least.
+    /// </summary>
+    void LoadViewerPage(ViewerPage vp)
+    {
+        CancelViewerRequests(vp);
+
+        bool near = Math.Abs(vp.Position - 1 - _vcurrent) <= 1;
+        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), near ? 50 : 220, img => vp.Image = img);
+
+        if (vp.Image != null) return;   // the sharp image came straight from the cache, or an older image is still showing
+        vp.Image = vp.Ref.Thumb;
+        if (vp.Image != null) return;
+        vp.PreviewRequest = Renderer.Request(vp.Ref, ViewerPreviewWidth, () => (int)RenderPriority.ViewerPreview, 25,
+            img => { if (vp.Image == null) vp.Image = img; });
     }
 
     // ---------- navigation ----------
@@ -337,7 +353,7 @@ public partial class MainWindow
         int cur = Math.Max(0, _vcurrent);
         _vzoom = Math.Clamp(_vzoom * factor, 0.4, 2.5);
         ApplyGeometry();
-        foreach (var vp in _vloaded.ToList()) _ = LoadViewerPageAsync(vp);   // re-render at the new size, old image shows meanwhile
+        foreach (var vp in _vloaded.ToList()) LoadViewerPage(vp);   // re-render at the new size, old image shows meanwhile
         ViewerList.UpdateLayout();
         _vscroll?.ScrollToVerticalOffset(cur * ViewerItemHeight);
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _vscroll?.ScrollToVerticalOffset(cur * ViewerItemHeight));
