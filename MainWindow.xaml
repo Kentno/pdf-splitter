@@ -134,7 +134,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- LIBRARY -->
-            <Border Grid.Column="0" Style="{StaticResource Card}">
+            <Border x:Name="PagesCard" Grid.Column="0" Style="{StaticResource Card}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -251,7 +251,7 @@
             <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Stretch" Background="Transparent"/>
 
             <!-- SPLITS -->
-            <Border Grid.Column="2" Style="{StaticResource Card}">
+            <Border x:Name="SplitsCard" Grid.Column="2" Style="{StaticResource Card}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -617,5 +617,8 @@
             </Grid>
         </Border>
     </Grid>
+
+    <!-- Flying page copies and the expanding card for the open/close transitions (never takes input) -->
+    <Canvas x:Name="TransitionLayer" Panel.ZIndex="200" IsHitTestVisible="False" ClipToBounds="True"/>
     </Grid>
 </Window>

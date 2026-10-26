@@ -25,6 +25,9 @@ public class ViewerPage : Notifier
     public int Position { get; }          // 1-based position within the current view
     public string Label { get; }
 
+    /// <summary>True once the full-size render (not just a thumbnail or preview) is showing in this slot.</summary>
+    public volatile bool IsSharp;
+
     /// <summary>Pending renders for this slot; cancelled when the slot scrolls out of the preload window.</summary>
     internal RenderRequest? PreviewRequest, SharpRequest;
 

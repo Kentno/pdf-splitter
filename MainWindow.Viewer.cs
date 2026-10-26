@@ -91,12 +91,19 @@ public partial class MainWindow
         _vswitching = false;
         ViewerTargetBox.SelectedItem = SplitsList.SelectedItem ?? (_splits.Count > 0 ? _splits[^1] : null);
 
+        // Where the tiles/card are on screen must be captured before the viewer covers them.
+        var plan = AnimationsEnabled && !_animating && ViewerOverlay.Visibility != Visibility.Visible ? PlanOpen(target) : null;
+
+        if (plan != null) { ViewerOverlay.Opacity = 0; ViewerOverlay.IsHitTestVisible = false; }
         ViewerOverlay.Visibility = Visibility.Visible;
         ViewerOverlay.Focus();
         ViewerOverlay.UpdateLayout();   // so the list has a real height to fit the page into
         _vaspect = PageAspectOfSource(target);
         _vzoom = FitZoom();
         LoadView(target, pageIndex);
+
+        if (plan != null && _vpages.Count > 0) _ = PlayOpenAsync(plan, target, Math.Clamp(pageIndex, 0, _vpages.Count - 1));
+        else { ViewerOverlay.Opacity = 1; ViewerOverlay.IsHitTestVisible = true; }
     }
 
     List<ViewerSource> BuildViewerSources()
@@ -147,6 +154,14 @@ public partial class MainWindow
     void CloseViewer_Click(object sender, RoutedEventArgs e) => CloseViewer();
 
     void CloseViewer()
+    {
+        if (ViewerOverlay.Visibility != Visibility.Visible || _animating) return;
+        var plan = AnimationsEnabled ? PlanClose() : null;
+        if (plan != null) _ = PlayCloseAsync(plan);
+        else CloseViewerNow();
+    }
+
+    void CloseViewerNow()
     {
         if (ViewerOverlay.Visibility != Visibility.Visible) return;
 
@@ -297,7 +312,8 @@ public partial class MainWindow
         CancelViewerRequests(vp);
 
         bool near = Math.Abs(vp.Position - 1 - _vcurrent) <= 1;
-        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), near ? 50 : 220, img => vp.Image = img);
+        vp.IsSharp = false;
+        vp.SharpRequest = Renderer.Request(vp.Ref, ViewerTargetWidth(), () => ViewerPriority(vp), near ? 50 : 220, img => { vp.Image = img; vp.IsSharp = true; });
 
         if (vp.Image != null) return;   // the sharp image came straight from the cache, or an older image is still showing
         vp.Image = vp.Ref.Thumb;
@@ -378,6 +394,7 @@ public partial class MainWindow
     void Viewer_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (ViewerOverlay.Visibility != Visibility.Visible) return;
+        if (_animating) { e.Handled = true; return; }   // ignore keys for the half second a transition takes
         if (e.Key == Key.Escape) { CloseViewer(); e.Handled = true; return; }
         if (Keyboard.FocusedElement is TextBox or ComboBox or ComboBoxItem) return;   // typing a page number etc.
 
